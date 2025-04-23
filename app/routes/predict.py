@@ -29,7 +29,9 @@ get_custom_objects().update({
 
 # ✅ Correct path to model file
 MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'maryam12.h5'))
+print(f"📦 Loading model from: {MODEL_PATH}")
 model = load_model(MODEL_PATH, compile=False)
+print("✅ Model loaded successfully")
 
 # ✅ Initialize the router
 router = APIRouter()
@@ -39,6 +41,7 @@ def preprocess_image(image_bytes):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image = image.resize((512, 256))
     img_array = np.array(image) / 255.0
+    print(f"🖼️ Preprocessed image shape: {img_array.shape}")
     return np.expand_dims(img_array, axis=0)
 
 # ✅ Predict route
@@ -49,8 +52,12 @@ async def predict(file: UploadFile = File(...)):
         img_array = preprocess_image(contents)
 
         prediction = model.predict(img_array)
+        print(f"🔍 Raw prediction output: {prediction}")
+
         label = "attack" if prediction[0][0] > 0.5 else "clean"
         confidence = float(prediction[0][0]) if label == "attack" else 1 - float(prediction[0][0])
+
+        print(f"✅ Label: {label}, Confidence: {round(confidence * 100, 2)}%")
 
         return JSONResponse(content={
             "prediction": label,
@@ -58,4 +65,5 @@ async def predict(file: UploadFile = File(...)):
         })
 
     except Exception as e:
+        print(f"❌ Error during prediction: {str(e)}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
