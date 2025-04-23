@@ -3,26 +3,44 @@ from fastapi.responses import JSONResponse
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import load_model
-from pennylane.qnn import KerasLayer
 from tensorflow.keras.utils import get_custom_objects
 from PIL import Image
 import io
 import os
+import pennylane as qml
+from pennylane.qnn import KerasLayer
 
-# Load model once when the router is imported
-MODEL_PATH = os.path.join(os.path.dirname(__file__), '..', 'maryam12.h5')
+# ✅ Define quantum layer again for loading
+n_qubits = 6
+dev = qml.device("default.qubit", wires=n_qubits)
+
+@qml.qnode(dev, interface="tf")
+def quantum_circuit(inputs, weights):
+    qml.templates.AngleEmbedding(inputs, wires=range(n_qubits), rotation="Y")
+    qml.templates.StronglyEntanglingLayers(weights, wires=range(n_qubits))
+    return [qml.expval(qml.PauliZ(i)) for i in range(n_qubits)]
+
+weight_shapes = {"weights": (3, n_qubits, 3)}
+custom_q_layer = KerasLayer(quantum_circuit, weight_shapes, output_dim=n_qubits)
+
 # ✅ Register KerasLayer
-get_custom_objects().update({"KerasLayer": KerasLayer})
+get_custom_objects().update({"KerasLayer": lambda **kwargs: KerasLayer(quantum_circuit, weight_shapes, output_dim=n_qubits)})
+
+# ✅ Load the model
+MODEL_PATH = os.path.join(os.path.dirname(__file__), '..', 'maryam12.h5')
 model = load_model(MODEL_PATH, compile=False)
 
+# ✅ Initialize the router
 router = APIRouter()
 
+# ✅ Image preprocessing
 def preprocess_image(image_bytes):
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     image = image.resize((512, 256))
     img_array = np.array(image) / 255.0
     return np.expand_dims(img_array, axis=0)
 
+# ✅ Predict route
 @router.post("/predict/")
 async def predict(file: UploadFile = File(...)):
     try:
