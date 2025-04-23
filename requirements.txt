@@ -5,3 +5,5 @@ tensorflow==2.12.0
 scikit-learn
 matplotlib
 numpy
+python-multipart
+
