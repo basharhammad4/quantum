@@ -21,13 +21,14 @@ def quantum_circuit(inputs, weights):
     return [qml.expval(qml.PauliZ(i)) for i in range(n_qubits)]
 
 weight_shapes = {"weights": (3, n_qubits, 3)}
-custom_q_layer = KerasLayer(quantum_circuit, weight_shapes, output_dim=n_qubits)
 
 # ✅ Register KerasLayer
-get_custom_objects().update({"KerasLayer": lambda **kwargs: KerasLayer(quantum_circuit, weight_shapes, output_dim=n_qubits)})
+get_custom_objects().update({
+    "KerasLayer": lambda **kwargs: KerasLayer(quantum_circuit, weight_shapes, output_dim=n_qubits)
+})
 
-# ✅ Load the model
-MODEL_PATH = os.path.join(os.path.dirname(__file__), '..', 'maryam12.h5')
+# ✅ Correct path to model file
+MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'maryam12.h5'))
 model = load_model(MODEL_PATH, compile=False)
 
 # ✅ Initialize the router
