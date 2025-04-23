@@ -3,12 +3,16 @@ from fastapi.responses import JSONResponse
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import load_model
+from pennylane.qnn import KerasLayer
+from tensorflow.keras.utils import get_custom_objects
 from PIL import Image
 import io
 import os
 
 # Load model once when the router is imported
 MODEL_PATH = os.path.join(os.path.dirname(__file__), '..', 'maryam12.h5')
+# ✅ Register KerasLayer
+get_custom_objects().update({"KerasLayer": KerasLayer})
 model = load_model(MODEL_PATH, compile=False)
 
 router = APIRouter()
