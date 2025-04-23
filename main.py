@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes.predict import router as predict_router
+from quantum.app.routes.predict import router as predict_router
 
 app = FastAPI(
     title="Quantum Shield API",
