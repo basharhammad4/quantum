@@ -4,7 +4,6 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.utils import get_custom_objects
-from PIL import Image
 import io
 import os
 import pennylane as qml
@@ -27,37 +26,36 @@ get_custom_objects().update({
     "KerasLayer": lambda **kwargs: KerasLayer(quantum_circuit, weight_shapes, output_dim=n_qubits)
 })
 
-# ✅ Correct path to model file
+# ✅ Load the model (absolute path works well on Render)
 MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'maryam12.h5'))
-print(f"📦 Loading model from: {MODEL_PATH}")
 model = load_model(MODEL_PATH, compile=False)
-print("✅ Model loaded successfully")
 
-# ✅ Initialize the router
+# ✅ Initialize FastAPI router
 router = APIRouter()
 
-# ✅ Image preprocessing
-def preprocess_image(image_bytes):
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    image = image.resize((512, 256))
-    img_array = np.array(image) / 255.0
-    print(f"🖼️ Preprocessed image shape: {img_array.shape}")
-    return np.expand_dims(img_array, axis=0)
-
-# ✅ Predict route
-@router.post("/predict/")
-async def predict(file: UploadFile = File(...)):
+# ✅ NPY file prediction route
+@router.post("/predict-npy/")
+async def predict_npy(file: UploadFile = File(...)):
     try:
         contents = await file.read()
-        img_array = preprocess_image(contents)
+        data = np.load(io.BytesIO(contents), allow_pickle=True)
 
-        prediction = model.predict(img_array)
-        print(f"🔍 Raw prediction output: {prediction}")
+        # Unwrap if stored as a dict
+        if isinstance(data, dict) and "image" in data:
+            data = data["image"]
 
+        if not isinstance(data, np.ndarray):
+            return JSONResponse(content={"error": "Uploaded file is not a valid numpy array."}, status_code=400)
+
+        if data.shape != (256, 512, 3):
+            return JSONResponse(content={"error": f"Invalid image shape: {data.shape}"}, status_code=400)
+
+        # Expand dims to match batch shape
+        input_data = np.expand_dims(data, axis=0)
+
+        prediction = model.predict(input_data)
         label = "attack" if prediction[0][0] > 0.5 else "clean"
         confidence = float(prediction[0][0]) if label == "attack" else 1 - float(prediction[0][0])
-
-        print(f"✅ Label: {label}, Confidence: {round(confidence * 100, 2)}%")
 
         return JSONResponse(content={
             "prediction": label,
@@ -65,5 +63,4 @@ async def predict(file: UploadFile = File(...)):
         })
 
     except Exception as e:
-        print(f"❌ Error during prediction: {str(e)}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
