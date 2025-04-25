@@ -4,12 +4,12 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import load_model
 from tensorflow.keras.utils import get_custom_objects
-import io
 import os
+import io
 import pennylane as qml
 from pennylane.qnn import KerasLayer
 
-# ✅ Define quantum layer again for loading
+# ✅ Quantum Layer Configuration
 n_qubits = 6
 dev = qml.device("default.qubit", wires=n_qubits)
 
@@ -20,40 +20,34 @@ def quantum_circuit(inputs, weights):
     return [qml.expval(qml.PauliZ(i)) for i in range(n_qubits)]
 
 weight_shapes = {"weights": (3, n_qubits, 3)}
-
-# ✅ Register KerasLayer
 get_custom_objects().update({
     "KerasLayer": lambda **kwargs: KerasLayer(quantum_circuit, weight_shapes, output_dim=n_qubits)
 })
 
-# ✅ Load the model (absolute path works well on Render)
+# ✅ Load model
 MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'maryam12.h5'))
 model = load_model(MODEL_PATH, compile=False)
 
-# ✅ Initialize FastAPI router
+# ✅ FastAPI router
 router = APIRouter()
 
-# ✅ NPY file prediction route
-@router.post("/predict-npy/")
-async def predict_npy(file: UploadFile = File(...)):
+@router.post("/predict/")
+async def predict(file: UploadFile = File(...)):
     try:
         contents = await file.read()
-        data = np.load(io.BytesIO(contents), allow_pickle=True)
+        img_array = np.load(io.BytesIO(contents), allow_pickle=True)
 
-        # Unwrap if stored as a dict
-        if isinstance(data, dict) and "image" in data:
-            data = data["image"]
+        # If the image is wrapped in a dict (like from `{'image': array}`), extract it
+        if isinstance(img_array, dict) and 'image' in img_array:
+            img_array = img_array['image']
 
-        if not isinstance(data, np.ndarray):
-            return JSONResponse(content={"error": "Uploaded file is not a valid numpy array."}, status_code=400)
+        if img_array.ndim != 3:
+            return JSONResponse(content={"error": "Invalid image shape. Expected 3D array."}, status_code=400)
 
-        if data.shape != (256, 512, 3):
-            return JSONResponse(content={"error": f"Invalid image shape: {data.shape}"}, status_code=400)
+        img_array = img_array.astype(np.float32) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
 
-        # Expand dims to match batch shape
-        input_data = np.expand_dims(data, axis=0)
-
-        prediction = model.predict(input_data)
+        prediction = model.predict(img_array)
         label = "attack" if prediction[0][0] > 0.5 else "clean"
         confidence = float(prediction[0][0]) if label == "attack" else 1 - float(prediction[0][0])
 
